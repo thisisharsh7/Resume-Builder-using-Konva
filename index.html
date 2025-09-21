@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Resume Builder</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/konva@9/konva.min.js"></script>
+    <script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <h1>Interactive Resume Builder</h1>
+            <div class="actions">
+                <button id="exportBtn" class="btn primary">Export to PDF</button>
+                <button id="saveBtn" class="btn secondary">Save Template</button>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <aside class="sidebar">
+                <div class="section">
+                    <h3>Resume Sections</h3>
+                    <div class="section-buttons">
+                        <button id="addHeaderBtn" class="btn section-btn">Add Header</button>
+                        <button id="addExperienceBtn" class="btn section-btn">Add Experience</button>
+                        <button id="addEducationBtn" class="btn section-btn">Add Education</button>
+                        <button id="addSkillsBtn" class="btn section-btn">Add Skills</button>
+                        <button id="addProjectsBtn" class="btn section-btn">Add Projects</button>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Styling Controls</h3>
+                    <div class="control-group">
+                        <label for="fontFamily">Font Family:</label>
+                        <select id="fontFamily">
+                            <option value="Arial">Arial</option>
+                            <option value="Times New Roman">Times New Roman</option>
+                            <option value="Helvetica">Helvetica</option>
+                            <option value="Georgia">Georgia</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="fontSize">Font Size:</label>
+                        <input type="range" id="fontSize" min="10" max="48" value="16">
+                        <span id="fontSizeValue">16px</span>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="textColor">Text Color:</label>
+                        <input type="color" id="textColor" value="#000000">
+                    </div>
+
+                    <div class="control-group">
+                        <label for="backgroundColor">Background:</label>
+                        <input type="color" id="backgroundColor" value="#ffffff">
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Templates</h3>
+                    <div class="template-buttons">
+                        <button id="modernTemplate" class="btn template-btn">Modern</button>
+                        <button id="classicTemplate" class="btn template-btn">Classic</button>
+                        <button id="minimalistTemplate" class="btn template-btn">Minimalist</button>
+                    </div>
+                </div>
+            </aside>
+
+            <main class="canvas-container">
+                <div id="container"></div>
+                <div class="canvas-info">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 24px; flex-wrap: wrap; font-size: 14px;">
+                        <span style="display: flex; align-items: center; gap: 6px;">
+                            <i data-lucide="edit-3" style="width: 16px; height: 16px;"></i>
+                            Double-click to edit
+                        </span>
+                        <span style="display: flex; align-items: center; gap: 6px;">
+                            <i data-lucide="mouse-pointer-click" style="width: 16px; height: 16px;"></i>
+                            Click to select
+                        </span>
+                        <span style="display: flex; align-items: center; gap: 6px;">
+                            <i data-lucide="menu" style="width: 16px; height: 16px;"></i>
+                            Right-click for menu
+                        </span>
+                        <span style="display: flex; align-items: center; gap: 6px;">
+                            <i data-lucide="trash-2" style="width: 16px; height: 16px;"></i>
+                            Delete key to remove
+                        </span>
+                        <span style="display: flex; align-items: center; gap: 6px;">
+                            <i data-lucide="move" style="width: 16px; height: 16px;"></i>
+                            Drag to move
+                        </span>
+                        <span style="display: flex; align-items: center; gap: 6px;">
+                            <i data-lucide="mouse" style="width: 16px; height: 16px;"></i>
+                            Wheel to scroll
+                        </span>
+                        <span style="display: flex; align-items: center; gap: 6px;">
+                            <i data-lucide="grid-3x3" style="width: 16px; height: 16px;"></i>
+                            G key for guides
+                        </span>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        // Initialize Lucide icons when DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.lucide) {
+                window.lucide.createIcons();
+            }
+        });
+    </script>
+</body>
+</html>
