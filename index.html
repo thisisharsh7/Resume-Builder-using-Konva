@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,18 +11,24 @@
     <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 </head>
+
 <body>
     <div class="app">
         <header class="header">
-            <h1>Interactive Resume Builder</h1>
+            <div class="header-left">
+                <button id="sidebarToggle" class="btn sidebar-toggle" style="display: none;">
+                    <i data-lucide="menu" style="width: 20px; height: 20px;"></i>
+                </button>
+                <h1>Interactive Resume Builder</h1>
+            </div>
             <div class="actions">
                 <button id="exportBtn" class="btn primary">Export to PDF</button>
-                <button id="saveBtn" class="btn secondary">Save Template</button>
             </div>
         </header>
 
         <div class="main-content">
-            <aside class="sidebar">
+            <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+            <aside class="sidebar" id="sidebar">
                 <div class="section">
                     <h3>Resume Sections</h3>
                     <div class="section-buttons">
@@ -75,7 +82,8 @@
             <main class="canvas-container">
                 <div id="container"></div>
                 <div class="canvas-info">
-                    <div style="display: flex; align-items: center; justify-content: center; gap: 24px; flex-wrap: wrap; font-size: 14px;">
+                    <div
+                        style="display: flex; align-items: center; justify-content: center; gap: 24px; flex-wrap: wrap; font-size: 14px;">
                         <span style="display: flex; align-items: center; gap: 6px;">
                             <i data-lucide="edit-3" style="width: 16px; height: 16px;"></i>
                             Double-click to edit
@@ -120,4 +128,5 @@
         });
     </script>
 </body>
+
 </html>

@@ -8,9 +8,11 @@ class ResumeBuilder {
         this.resumeData = {
             sections: []
         };
+        this.sidebarOpen = false;
 
         this.init();
         this.setupEventListeners();
+        this.setupSidebarToggle();
         this.startAutoSave();
         this.addToastContainer();
     }
@@ -440,6 +442,91 @@ class ResumeBuilder {
         this.showSelectionTooltip(element);
     }
 
+    // Helper method to measure text width using canvas
+    measureTextWidth(text, fontSize, fontFamily, fontStyle) {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        context.font = `${fontStyle} ${fontSize}px ${fontFamily}`;
+
+        // For multi-line text, find the widest line
+        const lines = text.split('\n');
+        let maxWidth = 0;
+
+        lines.forEach(line => {
+            const lineWidth = context.measureText(line).width;
+            if (lineWidth > maxWidth) {
+                maxWidth = lineWidth;
+            }
+        });
+
+        return maxWidth;
+    }
+
+    // Social link detection and parsing system
+    detectSocialLinks(text) {
+        const socialPlatforms = {
+            'linkedin.com/in/': { name: 'LinkedIn', baseUrl: 'https://linkedin.com/in/' },
+            'linkedin.com': { name: 'LinkedIn', baseUrl: 'https://linkedin.com' },
+            'github.com/': { name: 'GitHub', baseUrl: 'https://github.com/' },
+            'github.com': { name: 'GitHub', baseUrl: 'https://github.com' },
+            'twitter.com/': { name: 'Twitter', baseUrl: 'https://twitter.com/' },
+            'twitter.com': { name: 'Twitter', baseUrl: 'https://twitter.com' },
+            'x.com/': { name: 'X (Twitter)', baseUrl: 'https://x.com/' },
+            'x.com': { name: 'X (Twitter)', baseUrl: 'https://x.com' },
+            'instagram.com/': { name: 'Instagram', baseUrl: 'https://instagram.com/' },
+            'facebook.com/': { name: 'Facebook', baseUrl: 'https://facebook.com/' },
+            'behance.net/': { name: 'Behance', baseUrl: 'https://behance.net/' },
+            'dribbble.com/': { name: 'Dribbble', baseUrl: 'https://dribbble.com/' },
+            'stackoverflow.com/users/': { name: 'Stack Overflow', baseUrl: 'https://stackoverflow.com/users/' }
+        };
+
+        const links = [];
+        const linkRegex = /((?:https?:\/\/)?(?:www\.)?)([a-zA-Z0-9-]+\.[a-zA-Z0-9.-]+(?:\/[^\s]*)?)/g;
+
+        let match;
+        while ((match = linkRegex.exec(text)) !== null) {
+            const fullUrl = match[0];
+            const domain = match[2];
+
+            // Find matching platform
+            const platformKey = Object.keys(socialPlatforms).find(key => domain.includes(key));
+
+            if (platformKey) {
+                const platform = socialPlatforms[platformKey];
+                const fullLink = fullUrl.startsWith('http') ? fullUrl : `https://${fullUrl}`;
+
+                links.push({
+                    original: fullUrl,
+                    platform: platform.name,
+                    url: fullLink,
+                    startIndex: match.index,
+                    endIndex: match.index + match[0].length
+                });
+            }
+        }
+
+        return links;
+    }
+
+    // Transform text to show clean platform names
+    transformSocialLinksForDisplay(text) {
+        const links = this.detectSocialLinks(text);
+        let transformedText = text;
+        let offset = 0;
+
+        // Process links in reverse order to maintain correct indices
+        links.reverse().forEach(link => {
+            const before = transformedText.substring(0, link.startIndex + offset);
+            const after = transformedText.substring(link.endIndex + offset);
+            const replacement = link.platform;
+
+            transformedText = before + replacement + after;
+            offset += replacement.length - link.original.length;
+        });
+
+        return { transformedText, links: links.reverse() };
+    }
+
     editText(textNode) {
         if (this.isEditing) return;
 
@@ -451,23 +538,48 @@ class ResumeBuilder {
         editDiv.id = 'inlineEditor';
         editDiv.contentEditable = true;
 
+        // Calculate smart dimensions based on text content
+        const textContent = textNode.text();
+        const fontSize = textNode.fontSize();
+        const fontFamily = textNode.fontFamily();
+        const fontStyle = textNode.fontStyle();
+
+        // Measure actual text width
+        const textWidth = this.measureTextWidth(textContent, fontSize, fontFamily, fontStyle);
+        const lineCount = (textContent.match(/\n/g) || []).length + 1;
+        const estimatedHeight = Math.max(40, lineCount * (fontSize * 1.4)); // 1.4 line height
+
         // Calculate positions with viewport awareness
         const container = this.stage.container();
         const containerRect = container.getBoundingClientRect();
         const stageX = textNode.x() * this.stage.scaleX() + this.stage.x();
         const stageY = textNode.y() * this.stage.scaleY() + this.stage.y();
 
-        let editorLeft = containerRect.left + stageX;
-        let editorTop = containerRect.top + stageY;
-        let editorWidth = Math.max(200, textNode.width() * this.stage.scaleX());
+        // Smart width calculation with padding
+        const padding = 40; // 20px each side
+        let editorWidth = Math.max(200, textWidth + padding);
 
-        // Viewport boundary detection
+        // Responsive sizing based on screen size
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
-        const editorMaxWidth = 400;
-        const editorMaxHeight = 300;
+        const isMobile = viewportWidth <= 768;
 
-        // Adjust if overflowing right
+        if (isMobile) {
+            // Mobile: Use text width but with reasonable limits
+            editorWidth = Math.max(200, Math.min(editorWidth, viewportWidth - 32));
+            var editorLeft = (viewportWidth - editorWidth) / 2; // Center on mobile
+            var editorTop = Math.max(20, containerRect.top + stageY);
+        } else {
+            // Desktop/Tablet: Use actual text width with smart limits
+            editorWidth = Math.max(120, Math.min(editorWidth, viewportWidth * 0.7));
+            var editorLeft = containerRect.left + stageX;
+            var editorTop = containerRect.top + stageY;
+        }
+
+        const editorMaxHeight = Math.min(300, viewportHeight - 40);
+        const editorHeight = Math.min(estimatedHeight + 20, editorMaxHeight);
+
+        // Adjust if overflowing boundaries
         if (editorLeft + editorWidth > viewportWidth - 20) {
             editorLeft = viewportWidth - editorWidth - 20;
         }
@@ -477,11 +589,8 @@ class ResumeBuilder {
         }
 
         // Adjust if overflowing bottom
-        if (editorTop + editorMaxHeight > viewportHeight - 20) {
-            editorTop = viewportHeight - editorMaxHeight - 20;
-        }
-        if (editorTop < 20) {
-            editorTop = 20;
+        if (editorTop + editorHeight > viewportHeight - 20) {
+            editorTop = Math.max(20, viewportHeight - editorHeight - 20);
         }
 
         // Apply calculated positions and styling
@@ -490,23 +599,22 @@ class ResumeBuilder {
             left: ${editorLeft}px;
             top: ${editorTop}px;
             width: ${editorWidth}px;
-            max-width: ${editorMaxWidth}px;
+            height: ${editorHeight}px;
             max-height: ${editorMaxHeight}px;
             min-height: 40px;
-            font-size: ${textNode.fontSize()}px;
-            font-family: ${textNode.fontFamily()};
-            font-weight: ${textNode.fontStyle()};
+            font-size: ${fontSize}px;
+            font-family: ${fontFamily};
+            font-weight: ${fontStyle};
             color: ${textNode.fill()};
             background: rgba(255, 255, 255, 0.98);
             border: 1px solid #d0d0d0;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            padding: 8px 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            padding: 20px;
             z-index: 2000;
             white-space: pre-wrap;
             outline: none;
             border-radius: 6px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            resize: both;
+            resize: ${isMobile ? 'none' : 'both'};
             overflow: auto;
             line-height: 1.4;
         `;
@@ -659,10 +767,6 @@ class ResumeBuilder {
 
         document.getElementById('exportBtn').onclick = () => {
             this.exportToPDF();
-        };
-
-        document.getElementById('saveBtn').onclick = () => {
-            this.saveTemplate();
         };
 
         document.getElementById('modernTemplate').onclick = () => {
@@ -1062,89 +1166,90 @@ class ResumeBuilder {
         const background = this.layer.children[0];
         background.fill('#ffffff');
 
-        let currentY = 80; // Start with consistent top margin
+        let currentY = 60; // Professional top margin
 
         // === HEADER SECTION ===
-        this.addSection('header', 'ALEXANDRA CHEN', 60, currentY, 28, 'bold');
-        currentY += 40;
+        this.addSection('header', 'ALEXANDRA CHEN', 60, currentY, 32, 'bold');
+        currentY = this.getNextYPosition(35);
 
-        this.addSection('subtitle', 'Senior Full Stack Software Engineer', 60, currentY, 16, 'normal');
-        currentY += 30;
+        this.addSection('subtitle', 'Senior Full Stack Software Engineer', 60, currentY, 18, 'normal');
+        currentY = this.getNextYPosition(35);
 
-        this.addSection('contact', 'alexandra.chen@email.com  |  (555) 987-6543  |  San Francisco, CA\nlinkedin.com/in/alexandra-chen  |  github.com/alexchen', 60, currentY, 12, 'normal');
-        currentY += 45;
+        // Clean contact with social links
+        this.addSection('contact', 'alexandra.chen@email.com  •  (555) 987-6543  •  San Francisco, CA\nlinkedin.com/in/alexandra-chen  •  github.com/alexchen', 60, currentY, 14, 'normal');
+        currentY = this.getNextYPosition(35);
 
-        // Add divider line
+        // Professional divider
         const divider = new Konva.Line({
             points: [60, currentY, 740, currentY],
-            stroke: '#666666',
+            stroke: '#333333',
             strokeWidth: 1
         });
         this.layer.add(divider);
-        currentY += 30;
+        currentY = this.getNextYPosition(35);
 
         // === PROFESSIONAL SUMMARY ===
-        this.addSection('summary', 'PROFESSIONAL SUMMARY', 60, currentY, 14, 'bold');
-        currentY += 25;
+        this.addSection('summary', 'PROFESSIONAL SUMMARY', 60, currentY, 16, 'bold');
+        currentY = this.getNextYPosition(25);
 
-        this.addSection('summary-content', 'Experienced Full Stack Engineer with 6+ years developing scalable web applications. Expertise in React, Node.js, and cloud technologies. Led cross-functional teams of 5+ developers and improved system performance by 60% through optimization initiatives.', 60, currentY, 12, 'normal');
-        currentY += 55;
+        this.addSection('summary-content', 'Experienced Full Stack Engineer with 6+ years developing scalable web applications. Expertise in React, Node.js, and cloud technologies. Led cross-functional teams of 5+ developers and improved system performance by 60% through optimization initiatives.', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
-        // === EXPERIENCE SECTION ===
-        this.addSection('experience', 'PROFESSIONAL EXPERIENCE', 60, currentY, 14, 'bold');
-        currentY += 25;
+        // === PROFESSIONAL EXPERIENCE ===
+        this.addSection('experience', 'PROFESSIONAL EXPERIENCE', 60, currentY, 16, 'bold');
+        currentY = this.getNextYPosition(25);
 
-        // Job 1
-        this.addSection('job1-title', 'Senior Software Engineer', 60, currentY, 12, 'bold');
-        currentY += 20;
-        this.addSection('job1-company', 'TechFlow Solutions  |  March 2021 - Present', 60, currentY, 11, 'normal');
-        currentY += 20;
-        this.addSection('job1-desc', '• Led development of microservices architecture serving 2M+ users daily\n• Architected CI/CD pipeline reducing deployment time by 75%\n• Mentored 5 junior developers and conducted comprehensive code reviews\n• Built real-time analytics dashboard using React, D3.js, and WebSocket APIs', 60, currentY, 11, 'normal');
-        currentY += 75;
+        // Job 1 - Current Role
+        this.addSection('job1-title', 'Senior Software Engineer', 60, currentY, 14, 'bold');
+        currentY = this.getNextYPosition(18);
+        this.addSection('job1-company', 'TechFlow Solutions  •  March 2021 - Present', 60, currentY, 13, 'normal');
+        currentY = this.getNextYPosition(18);
+        this.addSection('job1-desc', '• Led development of microservices architecture serving 2M+ users daily\n• Architected CI/CD pipeline reducing deployment time by 75%\n• Mentored 5 junior developers and conducted comprehensive code reviews\n• Built real-time analytics dashboard using React, D3.js, and WebSocket APIs', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
         // Job 2
-        this.addSection('job2-title', 'Software Engineer', 60, currentY, 12, 'bold');
-        currentY += 20;
-        this.addSection('job2-company', 'InnovateLabs  |  June 2019 - March 2021', 60, currentY, 11, 'normal');
-        currentY += 20;
-        this.addSection('job2-desc', '• Developed responsive web applications using React and TypeScript\n• Optimized database queries improving response time by 45%\n• Collaborated with design team to implement pixel-perfect UI components\n• Implemented automated testing suite increasing code coverage to 90%', 60, currentY, 11, 'normal');
-        currentY += 75;
+        this.addSection('job2-title', 'Software Engineer', 60, currentY, 14, 'bold');
+        currentY = this.getNextYPosition(18);
+        this.addSection('job2-company', 'InnovateLabs  •  June 2019 - March 2021', 60, currentY, 13, 'normal');
+        currentY = this.getNextYPosition(18);
+        this.addSection('job2-desc', '• Developed responsive web applications using React and TypeScript\n• Optimized database queries improving response time by 45%\n• Collaborated with design team to implement pixel-perfect UI components\n• Implemented automated testing suite increasing code coverage to 90%', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
         // Job 3
-        this.addSection('job3-title', 'Junior Developer', 60, currentY, 12, 'bold');
-        currentY += 20;
-        this.addSection('job3-company', 'StartupXYZ  |  September 2017 - May 2019', 60, currentY, 11, 'normal');
-        currentY += 20;
-        this.addSection('job3-desc', '• Built RESTful APIs using Node.js and Express.js\n• Integrated third-party payment systems (Stripe, PayPal)\n• Participated in agile development cycles and sprint planning sessions', 60, currentY, 11, 'normal');
-        currentY += 65;
+        this.addSection('job3-title', 'Junior Developer', 60, currentY, 14, 'bold');
+        currentY = this.getNextYPosition(18);
+        this.addSection('job3-company', 'StartupXYZ  •  September 2017 - May 2019', 60, currentY, 13, 'normal');
+        currentY = this.getNextYPosition(18);
+        this.addSection('job3-desc', '• Built RESTful APIs using Node.js and Express.js\n• Integrated third-party payment systems (Stripe, PayPal)\n• Participated in agile development cycles and sprint planning sessions', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
         // === EDUCATION ===
-        this.addSection('education', 'EDUCATION', 60, currentY, 14, 'bold');
-        currentY += 25;
-        this.addSection('education-content', 'Bachelor of Science in Computer Science\nUniversity of California, Berkeley  |  Graduated May 2017  |  GPA: 3.8/4.0\n\nRelevant Coursework: Data Structures, Algorithms, Database Systems, Software Engineering', 60, currentY, 11, 'normal');
-        currentY += 75;
+        this.addSection('education', 'EDUCATION', 60, currentY, 16, 'bold');
+        currentY = this.getNextYPosition(25);
+        this.addSection('education-content', 'Bachelor of Science in Computer Science\nUniversity of California, Berkeley  •  Graduated May 2017  •  GPA: 3.8/4.0\n\nRelevant Coursework: Data Structures, Algorithms, Database Systems, Software Engineering', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
         // === TECHNICAL SKILLS ===
-        this.addSection('skills', 'TECHNICAL SKILLS', 60, currentY, 14, 'bold');
-        currentY += 25;
-        this.addSection('skills-content', 'Languages: JavaScript, TypeScript, Python, Java, Go\nFrontend: React, Vue.js, Angular, HTML5, CSS3, SASS, Tailwind CSS\nBackend: Node.js, Express.js, Django, Spring Boot, GraphQL\nDatabases: PostgreSQL, MongoDB, Redis, MySQL, DynamoDB\nCloud/DevOps: AWS, Docker, Kubernetes, Jenkins, Terraform, GitHub Actions\nTools: Git, Webpack, Jest, Cypress, Figma, Jira, Postman', 60, currentY, 11, 'normal');
-        currentY += 95;
+        this.addSection('skills', 'TECHNICAL SKILLS', 60, currentY, 16, 'bold');
+        currentY = this.getNextYPosition(25);
+        this.addSection('skills-content', 'Languages: JavaScript, TypeScript, Python, Java, Go\nFrontend: React, Vue.js, Angular, HTML5, CSS3, SASS, Tailwind CSS\nBackend: Node.js, Express.js, Django, Spring Boot, GraphQL\nDatabases: PostgreSQL, MongoDB, Redis, MySQL, DynamoDB\nCloud/DevOps: AWS, Docker, Kubernetes, Jenkins, Terraform, GitHub Actions\nTools: Git, Webpack, Jest, Cypress, Figma, Jira, Postman', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
         // === KEY PROJECTS ===
-        this.addSection('projects', 'KEY PROJECTS', 60, currentY, 14, 'bold');
-        currentY += 25;
+        this.addSection('projects', 'KEY PROJECTS', 60, currentY, 16, 'bold');
+        currentY = this.getNextYPosition(25);
 
         // Project 1
-        this.addSection('project1', 'E-Commerce Platform (2023)', 60, currentY, 12, 'bold');
-        currentY += 20;
-        this.addSection('project1-desc', '• Built scalable platform handling 50K+ daily transactions\n• Technologies: React, Node.js, PostgreSQL, AWS, Stripe API\n• Features: Real-time inventory, payment processing, admin dashboard', 60, currentY, 11, 'normal');
-        currentY += 55;
+        this.addSection('project1', 'E-Commerce Platform (2023)', 60, currentY, 14, 'bold');
+        currentY = this.getNextYPosition(18);
+        this.addSection('project1-desc', '• Built scalable platform handling 50K+ daily transactions\n• Technologies: React, Node.js, PostgreSQL, AWS, Stripe API\n• Features: Real-time inventory, payment processing, admin dashboard', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
         // Project 2
-        this.addSection('project2', 'Real-Time Chat Application (2022)', 60, currentY, 12, 'bold');
-        currentY += 20;
-        this.addSection('project2-desc', '• Developed messaging app with 10K+ active users\n• Technologies: React, Socket.io, Express.js, MongoDB\n• Features: File sharing, video calls, group chats, message encryption', 60, currentY, 11, 'normal');
-        currentY += 55;
+        this.addSection('project2', 'Real-Time Chat Application (2022)', 60, currentY, 14, 'bold');
+        currentY = this.getNextYPosition(18);
+        this.addSection('project2-desc', '• Developed messaging app with 10K+ active users\n• Technologies: React, Socket.io, Express.js, MongoDB\n• Features: File sharing, video calls, group chats, message encryption', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
         // Update canvas height to fit content
         this.updateCanvasHeight();
@@ -1155,65 +1260,66 @@ class ResumeBuilder {
         const background = this.layer.children[0];
         background.fill('#ffffff');
 
-        let currentY = 80; // Start with consistent top margin
+        let currentY = 60; // Professional top margin
 
         // === CENTERED HEADER ===
-        this.addSection('header', 'MICHAEL JOHNSON', 300, currentY, 26, 'bold');
-        currentY += 35;
+        this.addSection('header', 'MICHAEL JOHNSON', 250, currentY, 30, 'bold');
+        currentY = this.getNextYPosition(35);
 
-        this.addSection('contact', '456 Oak Avenue, San Francisco, CA 94102\n(555) 234-5678  |  michael.johnson@email.com\nlinkedin.com/in/michael-johnson-dev', 240, currentY, 11, 'normal');
-        currentY += 60;
+        // Centered contact information with clean social links
+        this.addSection('contact', '456 Oak Avenue, San Francisco, CA 94102\n(555) 234-5678  •  michael.johnson@email.com\nlinkedin.com/in/michael-johnson-dev  •  GitHub', 180, currentY, 14, 'normal');
+        currentY = this.getNextYPosition(35);
 
-        // === OBJECTIVE ===
-        this.addSection('objective', 'PROFESSIONAL OBJECTIVE', 60, currentY, 14, 'bold');
-        currentY += 25;
-        this.addSection('objective-content', 'Dedicated Software Engineer with 5+ years of experience in developing robust web applications and leading technical initiatives. Seeking to leverage expertise in full-stack development and team leadership to drive innovation at a forward-thinking technology company.', 60, currentY, 12, 'normal');
-        currentY += 65;
+        // === PROFESSIONAL OBJECTIVE ===
+        this.addSection('objective', 'PROFESSIONAL OBJECTIVE', 60, currentY, 16, 'bold');
+        currentY = this.getNextYPosition(25);
+        this.addSection('objective-content', 'Dedicated Software Engineer with 5+ years of experience in developing robust web applications and leading technical initiatives. Seeking to leverage expertise in full-stack development and team leadership to drive innovation at a forward-thinking technology company.', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
-        // === EXPERIENCE ===
-        this.addSection('experience', 'PROFESSIONAL EXPERIENCE', 60, currentY, 14, 'bold');
-        currentY += 25;
+        // === PROFESSIONAL EXPERIENCE ===
+        this.addSection('experience', 'PROFESSIONAL EXPERIENCE', 60, currentY, 16, 'bold');
+        currentY = this.getNextYPosition(25);
 
-        // Job 1
-        this.addSection('job1-title', 'Lead Software Engineer', 60, currentY, 12, 'bold');
-        currentY += 20;
-        this.addSection('job1-company', 'Digital Innovations Inc.  |  San Francisco, CA  |  January 2022 - Present', 60, currentY, 11, 'normal');
-        currentY += 20;
-        this.addSection('job1-desc', '• Spearheaded development of customer-facing web platform serving 500K+ users\n• Implemented microservices architecture reducing system latency by 40%\n• Led cross-functional team of 8 engineers and designers\n• Established coding standards and mentored 3 junior developers', 60, currentY, 11, 'normal');
-        currentY += 75;
+        // Job 1 - Current Role
+        this.addSection('job1-title', 'Lead Software Engineer', 60, currentY, 14, 'bold');
+        currentY = this.getNextYPosition(18);
+        this.addSection('job1-company', 'Digital Innovations Inc.  •  San Francisco, CA  •  January 2022 - Present', 60, currentY, 13, 'normal');
+        currentY = this.getNextYPosition(18);
+        this.addSection('job1-desc', '• Spearheaded development of customer-facing web platform serving 500K+ users\n• Implemented microservices architecture reducing system latency by 40%\n• Led cross-functional team of 8 engineers and designers\n• Established coding standards and mentored 3 junior developers', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
         // Job 2
-        this.addSection('job2-title', 'Software Engineer', 60, currentY, 12, 'bold');
-        currentY += 20;
-        this.addSection('job2-company', 'CloudTech Solutions  |  San Francisco, CA  |  March 2020 - December 2021', 60, currentY, 11, 'normal');
-        currentY += 20;
-        this.addSection('job2-desc', '• Developed and maintained RESTful APIs using Node.js and Express\n• Built responsive frontend applications with React and Redux\n• Collaborated with product managers to define technical requirements\n• Optimized database performance achieving 50% faster query execution', 60, currentY, 11, 'normal');
-        currentY += 75;
+        this.addSection('job2-title', 'Software Engineer', 60, currentY, 14, 'bold');
+        currentY = this.getNextYPosition(18);
+        this.addSection('job2-company', 'CloudTech Solutions  •  San Francisco, CA  •  March 2020 - December 2021', 60, currentY, 13, 'normal');
+        currentY = this.getNextYPosition(18);
+        this.addSection('job2-desc', '• Developed and maintained RESTful APIs using Node.js and Express\n• Built responsive frontend applications with React and Redux\n• Collaborated with product managers to define technical requirements\n• Optimized database performance achieving 50% faster query execution', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
         // Job 3
-        this.addSection('job3-title', 'Junior Software Developer', 60, currentY, 12, 'bold');
-        currentY += 20;
-        this.addSection('job3-company', 'WebFlow Agency  |  Oakland, CA  |  June 2018 - February 2020', 60, currentY, 11, 'normal');
-        currentY += 20;
-        this.addSection('job3-desc', '• Created custom WordPress themes and plugins for client websites\n• Implemented responsive designs and cross-browser compatibility\n• Participated in code reviews and agile development processes', 60, currentY, 11, 'normal');
-        currentY += 65;
+        this.addSection('job3-title', 'Junior Software Developer', 60, currentY, 14, 'bold');
+        currentY = this.getNextYPosition(18);
+        this.addSection('job3-company', 'WebFlow Agency  •  Oakland, CA  •  June 2018 - February 2020', 60, currentY, 13, 'normal');
+        currentY = this.getNextYPosition(18);
+        this.addSection('job3-desc', '• Created custom WordPress themes and plugins for client websites\n• Implemented responsive designs and cross-browser compatibility\n• Participated in code reviews and agile development processes', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
         // === EDUCATION ===
-        this.addSection('education', 'EDUCATION', 60, currentY, 14, 'bold');
-        currentY += 25;
-        this.addSection('education-content', 'Master of Science in Computer Science\nStanford University  |  Stanford, CA  |  Graduated June 2018  |  GPA: 3.9/4.0\nConcentration: Software Engineering and Systems\n\nBachelor of Science in Information Technology\nUniversity of California, Davis  |  Davis, CA  |  Graduated May 2016  |  Magna Cum Laude\nRelevant Coursework: Data Structures, Software Engineering, Database Design', 60, currentY, 11, 'normal');
-        currentY += 110;
+        this.addSection('education', 'EDUCATION', 60, currentY, 16, 'bold');
+        currentY = this.getNextYPosition(25);
+        this.addSection('education-content', 'Master of Science in Computer Science\nStanford University  •  Stanford, CA  •  Graduated June 2018  •  GPA: 3.9/4.0\nConcentration: Software Engineering and Systems\n\nBachelor of Science in Information Technology\nUniversity of California, Davis  •  Davis, CA  •  Graduated May 2016  •  Magna Cum Laude\nRelevant Coursework: Data Structures, Software Engineering, Database Design', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
-        // === TECHNICAL SKILLS ===
-        this.addSection('skills', 'TECHNICAL PROFICIENCIES', 60, currentY, 14, 'bold');
-        currentY += 25;
-        this.addSection('skills-content', 'Programming Languages: JavaScript, Python, Java, C++, TypeScript\nWeb Technologies: HTML5, CSS3, React, Angular, Vue.js, Node.js\nBackend Frameworks: Express.js, Django, Spring Boot, Flask\nDatabases: MySQL, PostgreSQL, MongoDB, Redis, DynamoDB\nCloud Platforms: AWS, Google Cloud Platform, Microsoft Azure\nDevelopment Tools: Git, Docker, Jenkins, Webpack, VS Code, Postman\nMethodologies: Agile, Scrum, Test-Driven Development, DevOps', 60, currentY, 11, 'normal');
-        currentY += 105;
+        // === TECHNICAL PROFICIENCIES ===
+        this.addSection('skills', 'TECHNICAL PROFICIENCIES', 60, currentY, 16, 'bold');
+        currentY = this.getNextYPosition(25);
+        this.addSection('skills-content', 'Programming Languages: JavaScript, Python, Java, C++, TypeScript\nWeb Technologies: HTML5, CSS3, React, Angular, Vue.js, Node.js\nBackend Frameworks: Express.js, Django, Spring Boot, Flask\nDatabases: MySQL, PostgreSQL, MongoDB, Redis, DynamoDB\nCloud Platforms: AWS, Google Cloud Platform, Microsoft Azure\nDevelopment Tools: Git, Docker, Jenkins, Webpack, VS Code, Postman\nMethodologies: Agile, Scrum, Test-Driven Development, DevOps', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
-        // === ACHIEVEMENTS ===
-        this.addSection('achievements', 'NOTABLE ACHIEVEMENTS', 60, currentY, 14, 'bold');
-        currentY += 25;
-        this.addSection('achievements-content', '• AWS Certified Solutions Architect - Professional (2023)\n• Led team that won "Best Innovation Award" at company hackathon (2022)\n• Published article "Optimizing React Performance" in Tech Weekly (2021)\n• Volunteer coding instructor at local community center (2019-Present)\n• Contributed to open-source projects with 500+ GitHub stars', 60, currentY, 11, 'normal');
+        // === NOTABLE ACHIEVEMENTS ===
+        this.addSection('achievements', 'NOTABLE ACHIEVEMENTS', 60, currentY, 16, 'bold');
+        currentY = this.getNextYPosition(25);
+        this.addSection('achievements-content', '• AWS Certified Solutions Architect - Professional (2023)\n• Led team that won "Best Innovation Award" at company hackathon (2022)\n• Published article "Optimizing React Performance" in Tech Weekly (2021)\n• Volunteer coding instructor at local community center (2019-Present)\n• Contributed to open-source projects with 500+ GitHub stars', 60, currentY, 15, 'normal');
 
         // Update canvas height to fit content
         this.updateCanvasHeight();
@@ -1224,82 +1330,83 @@ class ResumeBuilder {
         const background = this.layer.children[0];
         background.fill('#ffffff');
 
-        let currentY = 80; // Start with consistent top margin
+        let currentY = 60; // Professional top margin
 
-        // === HEADER SECTION ===
-        this.addSection('header', 'SARAH WILLIAMS', 60, currentY, 24, 'bold');
-        currentY += 35;
+        // === CLEAN HEADER ===
+        this.addSection('header', 'SARAH WILLIAMS', 60, currentY, 28, 'bold');
+        currentY = this.getNextYPosition(35);
 
-        this.addSection('contact', 'sarah.williams@email.com  •  (555) 345-6789  •  San Francisco, CA\ngithub.com/sarahw  •  linkedin.com/in/sarah-williams', 60, currentY, 11, 'normal');
-        currentY += 50;
+        // Clean contact with social links
+        this.addSection('contact', 'sarah.williams@email.com  •  (555) 345-6789  •  San Francisco, CA\ngithub.com/sarahw  •  linkedin.com/in/sarah-williams', 60, currentY, 14, 'normal');
+        currentY = this.getNextYPosition(35);
 
-        // === EXPERIENCE SECTION ===
-        this.addSection('experience', 'EXPERIENCE', 60, currentY, 13, 'bold');
-        currentY += 25;
+        // === EXPERIENCE ===
+        this.addSection('experience', 'EXPERIENCE', 60, currentY, 16, 'bold');
+        currentY = this.getNextYPosition(25);
 
-        // Job 1
-        this.addSection('job1-title', 'Senior Frontend Developer', 60, currentY, 12, 'bold');
-        currentY += 18;
-        this.addSection('job1-company', 'ModernTech Co  •  2022 - Present', 60, currentY, 11, 'normal');
-        currentY += 20;
-        this.addSection('job1-desc', 'Lead development of React applications. Built component library used across\n15+ products. Improved performance by 35% through code optimization.\nCollaborated with cross-functional teams on product development.', 60, currentY, 11, 'normal');
-        currentY += 65;
+        // Job 1 - Current Role
+        this.addSection('job1-title', 'Senior Frontend Developer', 60, currentY, 14, 'bold');
+        currentY = this.getNextYPosition(18);
+        this.addSection('job1-company', 'ModernTech Co  •  2022 - Present', 60, currentY, 13, 'normal');
+        currentY = this.getNextYPosition(18);
+        this.addSection('job1-desc', 'Lead development of React applications. Built component library used across\n15+ products. Improved performance by 35% through code optimization.\nCollaborated with cross-functional teams on product development.', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
         // Job 2
-        this.addSection('job2-title', 'Frontend Developer', 60, currentY, 12, 'bold');
-        currentY += 18;
-        this.addSection('job2-company', 'StartupHub  •  2020 - 2022', 60, currentY, 11, 'normal');
-        currentY += 20;
-        this.addSection('job2-desc', 'Developed responsive web applications using React and TypeScript.\nCollaborated with UX team on design implementation. Maintained 98% test coverage.\nImplemented automated testing and continuous integration workflows.', 60, currentY, 11, 'normal');
-        currentY += 65;
+        this.addSection('job2-title', 'Frontend Developer', 60, currentY, 14, 'bold');
+        currentY = this.getNextYPosition(18);
+        this.addSection('job2-company', 'StartupHub  •  2020 - 2022', 60, currentY, 13, 'normal');
+        currentY = this.getNextYPosition(18);
+        this.addSection('job2-desc', 'Developed responsive web applications using React and TypeScript.\nCollaborated with UX team on design implementation. Maintained 98% test coverage.\nImplemented automated testing and continuous integration workflows.', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
         // Job 3
-        this.addSection('job3-title', 'Junior Developer', 60, currentY, 12, 'bold');
-        currentY += 18;
-        this.addSection('job3-company', 'WebCrafters  •  2018 - 2020', 60, currentY, 11, 'normal');
-        currentY += 20;
-        this.addSection('job3-desc', 'Built custom websites using HTML, CSS, and JavaScript.\nLearned modern frameworks and development best practices.\nParticipated in code reviews and agile development processes.', 60, currentY, 11, 'normal');
-        currentY += 65;
+        this.addSection('job3-title', 'Junior Developer', 60, currentY, 14, 'bold');
+        currentY = this.getNextYPosition(18);
+        this.addSection('job3-company', 'WebCrafters  •  2018 - 2020', 60, currentY, 13, 'normal');
+        currentY = this.getNextYPosition(18);
+        this.addSection('job3-desc', 'Built custom websites using HTML, CSS, and JavaScript.\nLearned modern frameworks and development best practices.\nParticipated in code reviews and agile development processes.', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
         // === EDUCATION ===
-        this.addSection('education', 'EDUCATION', 60, currentY, 13, 'bold');
-        currentY += 25;
-        this.addSection('education-content', 'Bachelor of Science in Computer Science\nUC San Diego  •  2018\nRelevant coursework: Web Development, Data Structures, Software Engineering', 60, currentY, 11, 'normal');
-        currentY += 65;
+        this.addSection('education', 'EDUCATION', 60, currentY, 16, 'bold');
+        currentY = this.getNextYPosition(25);
+        this.addSection('education-content', 'Bachelor of Science in Computer Science\nUC San Diego  •  2018\nRelevant coursework: Web Development, Data Structures, Software Engineering', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
         // === SKILLS ===
-        this.addSection('skills', 'SKILLS', 60, currentY, 13, 'bold');
-        currentY += 25;
-        this.addSection('skills-content', 'JavaScript, TypeScript, React, Next.js, HTML/CSS, Node.js, Python\nGit, AWS, MongoDB, PostgreSQL, Jest, Figma, Docker, Jenkins\nAgile Development, Test-Driven Development, Responsive Design', 60, currentY, 11, 'normal');
-        currentY += 65;
+        this.addSection('skills', 'SKILLS', 60, currentY, 16, 'bold');
+        currentY = this.getNextYPosition(25);
+        this.addSection('skills-content', 'JavaScript, TypeScript, React, Next.js, HTML/CSS, Node.js, Python\nGit, AWS, MongoDB, PostgreSQL, Jest, Figma, Docker, Jenkins\nAgile Development, Test-Driven Development, Responsive Design', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
         // === PROJECTS ===
-        this.addSection('projects', 'PROJECTS', 60, currentY, 13, 'bold');
-        currentY += 25;
+        this.addSection('projects', 'PROJECTS', 60, currentY, 16, 'bold');
+        currentY = this.getNextYPosition(25);
 
         // Project 1
-        this.addSection('project1', 'Portfolio Website', 60, currentY, 12, 'bold');
-        currentY += 18;
-        this.addSection('project1-tech', 'React, Next.js, Tailwind CSS', 60, currentY, 10, 'normal');
-        currentY += 18;
-        this.addSection('project1-desc', 'Personal portfolio showcasing projects and skills.\nDeployed on Vercel with 99.9% uptime and optimized performance.', 60, currentY, 11, 'normal');
-        currentY += 45;
+        this.addSection('project1', 'Portfolio Website', 60, currentY, 14, 'bold');
+        currentY = this.getNextYPosition(16);
+        this.addSection('project1-tech', 'React, Next.js, Tailwind CSS', 60, currentY, 12, 'normal');
+        currentY = this.getNextYPosition(16);
+        this.addSection('project1-desc', 'Personal portfolio showcasing projects and skills.\nDeployed on Vercel with 99.9% uptime and optimized performance.', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
         // Project 2
-        this.addSection('project2', 'Task Manager App', 60, currentY, 12, 'bold');
-        currentY += 18;
-        this.addSection('project2-tech', 'React, Firebase, Material-UI', 60, currentY, 10, 'normal');
-        currentY += 18;
-        this.addSection('project2-desc', 'Collaborative task management tool with real-time updates.\nUsed by 200+ users in beta testing with positive feedback.', 60, currentY, 11, 'normal');
-        currentY += 45;
+        this.addSection('project2', 'Task Manager App', 60, currentY, 14, 'bold');
+        currentY = this.getNextYPosition(16);
+        this.addSection('project2-tech', 'React, Firebase, Material-UI', 60, currentY, 12, 'normal');
+        currentY = this.getNextYPosition(16);
+        this.addSection('project2-desc', 'Collaborative task management tool with real-time updates.\nUsed by 200+ users in beta testing with positive feedback.', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
         // Project 3
-        this.addSection('project3', 'Weather Dashboard', 60, currentY, 12, 'bold');
-        currentY += 18;
-        this.addSection('project3-tech', 'Vue.js, OpenWeather API', 60, currentY, 10, 'normal');
-        currentY += 18;
-        this.addSection('project3-desc', 'Responsive weather application with location-based forecasting\nand historical data visualization using Chart.js.', 60, currentY, 11, 'normal');
-        currentY += 45;
+        this.addSection('project3', 'Weather Dashboard', 60, currentY, 14, 'bold');
+        currentY = this.getNextYPosition(16);
+        this.addSection('project3-tech', 'Vue.js, OpenWeather API', 60, currentY, 12, 'normal');
+        currentY = this.getNextYPosition(16);
+        this.addSection('project3-desc', 'Responsive weather application with location-based forecasting\nand historical data visualization using Chart.js.', 60, currentY, 15, 'normal');
+        currentY = this.getNextYPosition(35);
 
         // Update canvas height to fit content
         this.updateCanvasHeight();
@@ -1347,7 +1454,7 @@ class ResumeBuilder {
             // Sort by Y position
             textElements.sort((a, b) => a.y - b.y);
 
-            // Group elements by sections and apply proper formatting
+            // Process each text element and create links
             for (let i = 0; i < textElements.length; i++) {
                 const element = textElements[i];
                 const text = element.text;
@@ -1359,25 +1466,25 @@ class ResumeBuilder {
                 if (isHeader) {
                     pdf.setFont('helvetica', 'bold');
                     pdf.setFontSize(18);
-                    if (i > 0) currentY += 6; // Extra space before headers (except first)
+                    if (i > 0) currentY += 6;
                 } else if (isSectionHeader) {
                     pdf.setFont('helvetica', 'bold');
                     pdf.setFontSize(14);
-                    currentY += 5; // Space before section headers
+                    currentY += 5;
                 } else if (isSubHeader) {
                     pdf.setFont('helvetica', 'bold');
                     pdf.setFontSize(11);
-                    currentY += 3; // Space before sub headers
+                    currentY += 3;
                 } else {
                     pdf.setFont('helvetica', 'normal');
                     pdf.setFontSize(10);
-                    currentY += 1; // Minimal space for body text
+                    currentY += 1;
                 }
 
-                // Handle multi-line text
+                // Handle multi-line text with social link detection
                 const lines = text.split('\n');
                 for (let j = 0; j < lines.length; j++) {
-                    const line = lines[j].trim();
+                    let line = lines[j].trim();
                     if (line) {
                         // Check if we need a new page
                         if (currentY > pageHeight - margin - 15) {
@@ -1385,11 +1492,72 @@ class ResumeBuilder {
                             currentY = margin;
                         }
 
-                        // Split long lines to fit page width
-                        const textLines = pdf.splitTextToSize(line, contentWidth);
-                        for (let k = 0; k < textLines.length; k++) {
-                            pdf.text(textLines[k], margin, currentY);
-                            currentY += pdf.getFontSize() * 0.4; // Tight line height
+                        // Detect and transform social links in this line
+                        const socialLinks = this.detectSocialLinks(line);
+
+                        if (socialLinks.length > 0) {
+                            // Process line with social links
+                            let processedLine = line;
+                            const linkPositions = [];
+
+                            // Replace URLs with platform names and track positions
+                            socialLinks.reverse().forEach(link => {
+                                const before = processedLine.substring(0, link.startIndex);
+                                const after = processedLine.substring(link.endIndex);
+
+                                // Store link information for creating clickable areas
+                                linkPositions.unshift({
+                                    text: link.platform,
+                                    url: link.url,
+                                    startPos: before.length,
+                                    endPos: before.length + link.platform.length
+                                });
+
+                                processedLine = before + link.platform + after;
+                            });
+
+                            // Split the processed line to fit page width
+                            const textLines = pdf.splitTextToSize(processedLine, contentWidth);
+
+                            for (let k = 0; k < textLines.length; k++) {
+                                const lineStartY = currentY;
+                                const lineText = textLines[k];
+
+                                // Add the text
+                                pdf.text(lineText, margin, currentY);
+
+                                // Create clickable links for social platforms in this line
+                                linkPositions.forEach(linkPos => {
+                                    // Check if this link text appears in the current line
+                                    const linkIndex = lineText.indexOf(linkPos.text);
+                                    if (linkIndex !== -1) {
+                                        // Calculate link position and dimensions
+                                        const linkX = margin + pdf.getTextWidth(lineText.substring(0, linkIndex));
+                                        const linkWidth = pdf.getTextWidth(linkPos.text);
+                                        const linkHeight = pdf.getFontSize() * 0.4;
+
+                                        // Create clickable link area
+                                        pdf.link(linkX, lineStartY - linkHeight + 1, linkWidth, linkHeight, {
+                                            url: linkPos.url
+                                        });
+
+                                        // Optional: Add underline to indicate it's a link
+                                        pdf.setDrawColor(0, 0, 255); // Blue color for links
+                                        pdf.setLineWidth(0.1);
+                                        pdf.line(linkX, lineStartY + 0.5, linkX + linkWidth, lineStartY + 0.5);
+                                        pdf.setDrawColor(0, 0, 0); // Reset to black
+                                    }
+                                });
+
+                                currentY += pdf.getFontSize() * 0.4;
+                            }
+                        } else {
+                            // No social links, process normally
+                            const textLines = pdf.splitTextToSize(line, contentWidth);
+                            for (let k = 0; k < textLines.length; k++) {
+                                pdf.text(textLines[k], margin, currentY);
+                                currentY += pdf.getFontSize() * 0.4;
+                            }
                         }
                     } else {
                         currentY += 2; // Space for empty lines
@@ -1409,30 +1577,11 @@ class ResumeBuilder {
             }
 
             pdf.save('resume.pdf');
-            this.showToast('Resume exported successfully!', 'success');
+            this.showToast('Resume exported with clickable links!', 'success');
         } catch (error) {
             console.error('Export failed:', error);
             this.showToast('Failed to export resume. Please try again.', 'error');
         }
-    }
-
-    saveTemplate() {
-        const templateData = {
-            resumeData: this.resumeData,
-            timestamp: new Date().toISOString()
-        };
-
-        const dataStr = JSON.stringify(templateData, null, 2);
-        const dataBlob = new Blob([dataStr], { type: 'application/json' });
-
-        const url = URL.createObjectURL(dataBlob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'resume-template.json';
-        link.click();
-
-        URL.revokeObjectURL(url);
-        this.showToast('Template saved successfully!', 'success');
     }
 
     // ===== GUIDE SYSTEM =====
@@ -1695,6 +1844,76 @@ class ResumeBuilder {
             this.clearGuides();
         }
         this.showToast(this.guidesEnabled ? 'Guides enabled' : 'Guides disabled', 'info', 1500);
+    }
+
+    setupSidebarToggle() {
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        const sidebar = document.getElementById('sidebar');
+        const backdrop = document.getElementById('sidebarBackdrop');
+
+        if (!sidebarToggle || !sidebar || !backdrop) return;
+
+        // Toggle sidebar
+        const toggleSidebar = () => {
+            this.sidebarOpen = !this.sidebarOpen;
+
+            if (this.sidebarOpen) {
+                sidebar.classList.add('open');
+                backdrop.classList.add('show');
+                document.body.style.overflow = 'hidden'; // Prevent background scroll
+            } else {
+                sidebar.classList.remove('open');
+                backdrop.classList.remove('show');
+                document.body.style.overflow = '';
+            }
+        };
+
+        // Close sidebar
+        const closeSidebar = () => {
+            if (this.sidebarOpen) {
+                this.sidebarOpen = false;
+                sidebar.classList.remove('open');
+                backdrop.classList.remove('show');
+                document.body.style.overflow = '';
+            }
+        };
+
+        // Event listeners
+        sidebarToggle.addEventListener('click', toggleSidebar);
+        backdrop.addEventListener('click', closeSidebar);
+
+        // Close on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.sidebarOpen && !this.isEditing) {
+                closeSidebar();
+            }
+        });
+
+        // Close sidebar when clicking on canvas (only on mobile/tablet)
+        const checkAndCloseSidebar = () => {
+            if (window.innerWidth <= 1020 && this.sidebarOpen) {
+                closeSidebar();
+            }
+        };
+
+        // Close sidebar when interacting with canvas on mobile
+        if (this.stage) {
+            this.stage.on('click', checkAndCloseSidebar);
+        } else {
+            // If stage isn't ready yet, add event listener when it's created
+            setTimeout(() => {
+                if (this.stage) {
+                    this.stage.on('click', checkAndCloseSidebar);
+                }
+            }, 100);
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 1020 && this.sidebarOpen) {
+                closeSidebar();
+            }
+        });
     }
 
     rgbToHex(rgb) {
