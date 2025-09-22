@@ -402,6 +402,7 @@ input[type="color"] {
         align-items: center;
         justify-content: space-between;
         padding: 20px 24px;
+        margin-bottom: 24px;
         background: #ffffff;
         border-bottom: 1px solid #e0e0e0;
         position: sticky;
@@ -412,9 +413,10 @@ input[type="color"] {
     }
 
     .sidebar-title {
-        font-size: 18px;
+        font-size: 20px;
         font-weight: 600;
         color: #333333;
+        
         margin: 0;
         flex: 1;
     }
