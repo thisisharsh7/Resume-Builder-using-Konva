@@ -1882,6 +1882,12 @@ class ResumeBuilder {
         sidebarToggle.addEventListener('click', toggleSidebar);
         backdrop.addEventListener('click', closeSidebar);
 
+        // Add close button event listener
+        const sidebarClose = document.getElementById('sidebarClose');
+        if (sidebarClose) {
+            sidebarClose.addEventListener('click', closeSidebar);
+        }
+
         // Close on escape key
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && this.sidebarOpen && !this.isEditing) {
