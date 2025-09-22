@@ -1934,22 +1934,27 @@ class ResumeBuilder {
 
     updateResponsiveScale() {
         const container = document.getElementById('container');
-        if (!container || !this.stage) return;
+        const canvasContainer = document.querySelector('.canvas-container');
+        if (!container || !this.stage || !canvasContainer) return;
 
         // Reset any existing transform first
         container.style.transform = '';
 
-        // Get the actual canvas width (800px by default)
+        // Get the actual canvas dimensions
         const canvasWidth = this.stage.width();
+        const canvasHeight = this.stage.height();
 
         // For mobile and tablet views (≤1020px)
         if (window.innerWidth <= 1020) {
-            // Calculate available width with padding
-            const padding = window.innerWidth <= 768 ? 16 : 32; // Less padding on mobile
+            // Calculate available space
+            const padding = window.innerWidth <= 768 ? 16 : 32;
             const availableWidth = window.innerWidth - padding;
+            const availableHeight = window.innerHeight - 120 - padding; // Account for header + canvas info
 
-            // Calculate scale to fit canvas in available space
-            const scale = Math.min(availableWidth / canvasWidth, 1);
+            // Calculate scale to fit both dimensions
+            const scaleX = availableWidth / canvasWidth;
+            const scaleY = availableHeight / canvasHeight;
+            const scale = Math.min(scaleX, scaleY, 1);
 
             // Apply transform with proper scaling
             container.style.transform = `scale(${scale})`;
