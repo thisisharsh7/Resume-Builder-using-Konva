@@ -1914,12 +1914,57 @@ class ResumeBuilder {
             }, 100);
         }
 
-        // Handle window resize
-        window.addEventListener('resize', () => {
+        // Handle window resize and canvas scaling
+        const updateCanvasScale = () => {
             if (window.innerWidth > 1020 && this.sidebarOpen) {
                 closeSidebar();
             }
-        });
+
+            // Update canvas scaling for mobile/tablet view
+            this.updateResponsiveScale();
+        };
+
+        window.addEventListener('resize', updateCanvasScale);
+
+        // Initial scale setup
+        setTimeout(() => {
+            this.updateResponsiveScale();
+        }, 100);
+    }
+
+    updateResponsiveScale() {
+        const container = document.getElementById('container');
+        if (!container || !this.stage) return;
+
+        // Reset any existing transform first
+        container.style.transform = '';
+
+        // Get the actual canvas width (800px by default)
+        const canvasWidth = this.stage.width();
+
+        // For mobile and tablet views (≤1020px)
+        if (window.innerWidth <= 1020) {
+            // Calculate available width with padding
+            const padding = window.innerWidth <= 768 ? 16 : 32; // Less padding on mobile
+            const availableWidth = window.innerWidth - padding;
+
+            // Calculate scale to fit canvas in available space
+            const scale = Math.min(availableWidth / canvasWidth, 1);
+
+            // Apply transform with proper scaling
+            container.style.transform = `scale(${scale})`;
+            container.style.transformOrigin = 'top center';
+
+            // Adjust container margins for centering
+            const scaledWidth = canvasWidth * scale;
+            const sideMargin = Math.max(0, (window.innerWidth - scaledWidth) / 2);
+            container.style.marginLeft = `${sideMargin}px`;
+            container.style.marginRight = `${sideMargin}px`;
+        } else {
+            // Desktop view - no scaling needed
+            container.style.marginLeft = 'auto';
+            container.style.marginRight = 'auto';
+        }
     }
 
     rgbToHex(rgb) {
